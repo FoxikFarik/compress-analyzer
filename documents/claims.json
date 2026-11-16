@@ -1,0 +1,27 @@
+
+{
+    "summary_claims": [
+        {
+            "text": "Вода замерзает при температуре 0 °C.",
+            "sentence_index": 0,
+            "paragraph_index": 0
+        },
+        {
+            "text": "Вода кипит при температуре 100 °C.",
+            "sentence_index": 1,
+            "paragraph_index": 0
+        }
+    ],
+    "reference_claims": [
+        {
+            "text": "Температура замерзания воды составляет 0 °C.",
+            "sentence_index": 0,
+            "paragraph_index": 0
+        },
+        {
+            "text": "Вода закипает при температуре 100 °C.",
+            "sentence_index": 1,
+            "paragraph_index": 0
+        }
+    ]
+}
