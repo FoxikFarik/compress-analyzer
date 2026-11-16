@@ -1,25 +1,63 @@
+import argparse
 from pathlib import Path
 
-from claims_loader import load_claims
 from document_loader import load_document
 
 from metrics.evaluator import DocumentEvaluator
 from metrics.faithfulness import FaithfulnessEvaluator
 from metrics.reference import ReferenceMetricsEvaluator
 
-from models.claim import Claim
-
-from nli.fake import FakeNLIModel
+from nli.transformer import TransformerNLIModel
 from retrieval.search import FragmentSearch
 from retrieval.claim_matcher import ClaimMatcher
 
 
-BASE_DIR = Path(__file__).resolve().parent
-DOCUMENTS_DIR = BASE_DIR / "documents"
+def parse_arguments():
+    """Обрабатывает аргументы командной строки."""
 
-SOURCE_PATH = DOCUMENTS_DIR / "AI_Basics_original.docx"
-SUMMARY_PATH = DOCUMENTS_DIR / "AI_Basics_compressed.docx"
-CLAIMS_PATH = DOCUMENTS_DIR / "claims.json"
+    parser = argparse.ArgumentParser(
+        description="Оценка качества сокращённого документа."
+    )
+
+    parser.add_argument(
+        "source",
+        type=Path,
+        help="Путь к исходному документу."
+    )
+
+    parser.add_argument(
+        "summary",
+        type=Path,
+        help="Путь к конспекту."
+    )
+
+    parser.add_argument(
+        "claims",
+        type=Path,
+        nargs="?",
+        help="Путь к файлу с утверждениями (необязательно)."
+    )
+
+    return parser.parse_args()
+
+
+def create_evaluator(source):
+    """Создаёт и настраивает общий оценщик документов."""
+
+    fragment_search = FragmentSearch(context_window=1)
+    fragment_search.fit(source)
+
+    faithfulness_evaluator = FaithfulnessEvaluator(
+        fragment_search=fragment_search,
+        nli_model=TransformerNLIModel()
+    )
+
+    return DocumentEvaluator(
+        faithfulness_evaluator=faithfulness_evaluator,
+        reference_metrics_evaluator=ReferenceMetricsEvaluator(
+            claim_matcher=ClaimMatcher(threshold=0.5)
+        )
+    )
 
 
 def print_report(report, source, summary):
@@ -36,7 +74,6 @@ def print_report(report, source, summary):
     print(f"  Слов в конспекте:  {summary.word_count}")
 
     print("\nМетрики:")
-
     print(f"  Compression Ratio: {report.compression_ratio:.2%}")
     print(f"  Duplicate Rate:    {report.duplicate_rate:.2%}")
 
@@ -81,43 +118,48 @@ def print_claim_matches(matches):
 
         print(f"Сходство: {result.similarity:.2%}")
 
-        status = "СОПОСТАВЛЕНО" if result.matched else "НЕ СОПОСТАВЛЕНО"
+        status = (
+            "СОПОСТАВЛЕНО"
+            if result.matched
+            else "НЕ СОПОСТАВЛЕНО"
+        )
         print(f"Статус:   {status}")
 
     print("-" * 60)
 
 
-
 def main():
     """Запускает процесс оценки конспекта."""
 
-    source = load_document(str(SOURCE_PATH))
-    summary = load_document(str(SUMMARY_PATH))
+    args = parse_arguments()
 
-    summary_claims, reference_claims = load_claims(
-        str(CLAIMS_PATH)
-    )
+    for path in (args.source, args.summary):
+        if not path.is_file():
+            raise FileNotFoundError(
+                f"Не найден документ: {path}"
+            )
 
-    # Подготавливаем поиск по исходному документу.
-    fragment_search = FragmentSearch(context_window=1)
-    fragment_search.fit(source)
+    source = load_document(str(args.source))
+    summary = load_document(str(args.summary))
 
-    # Создаём оценщик Faithfulness.
-    faithfulness_evaluator = FaithfulnessEvaluator(
-        fragment_search=fragment_search,
-        nli_model=FakeNLIModel()
-    )
+    evaluator = create_evaluator(source)
 
-    # Создаём оценщик Reference Metrics.
-    reference_metrics_evaluator = ReferenceMetricsEvaluator(
-        claim_matcher=ClaimMatcher(threshold=0.5)
-    )
+    summary_claims = None
+    reference_claims = None
 
-    # Создаём общий оценщик.
-    evaluator = DocumentEvaluator(
-        faithfulness_evaluator=faithfulness_evaluator,
-        reference_metrics_evaluator=reference_metrics_evaluator
-    )
+    if args.claims is not None:
+        if not args.claims.is_file():
+            raise FileNotFoundError(
+                f"Не найден файл с утверждениями: {args.claims}"
+            )
+
+        from claims_loader import load_claims
+
+        summary_claims, reference_claims = load_claims(
+            str(args.claims)
+        )
+    else:
+        evaluator.reference_metrics_evaluator = None
 
     report = evaluator.evaluate(
         source=source,
