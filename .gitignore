@@ -1,5 +1,18 @@
+# Виртуальное окружение
 .venv/
 venv/
+
+# Python
 __pycache__/
-.pytest_cache/
 *.py[cod]
+
+# Тестирование
+.pytest_cache/
+
+# Пользовательские документы
+documents/*
+!documents/.gitkeep
+
+# Системные файлы
+.DS_Store
+Thumbs.db
